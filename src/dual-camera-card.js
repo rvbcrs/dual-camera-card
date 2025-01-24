@@ -26,10 +26,9 @@ class DualCameraCard extends LitElement {
         position: relative;
         aspect-ratio: 16/9;
       }
-      .camera-feed {
+      ha-camera-stream {
         width: 100%;
         height: 100%;
-        object-fit: cover;
         border-radius: 4px;
       }
       .camera-error {
@@ -46,12 +45,45 @@ class DualCameraCard extends LitElement {
         text-align: center;
         padding: 16px;
       }
+      .controls {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 8px;
+        display: flex;
+        justify-content: space-between;
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
+      }
+      .camera-container:hover .controls {
+        opacity: 1;
+      }
+      .mute-button {
+        background: none;
+        border: none;
+        color: white;
+        cursor: pointer;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
       @media (max-width: 600px) {
         .card-container {
           flex-direction: column;
         }
       }
     `;
+  }
+
+  constructor() {
+    super();
+    this._muted = {
+      camera1: true,
+      camera2: true,
+    };
   }
 
   setConfig(config) {
@@ -72,14 +104,14 @@ class DualCameraCard extends LitElement {
     return html`
       <ha-card>
         <div class="card-container">
-          ${this._renderCamera(camera1, this.config.camera1)}
-          ${this._renderCamera(camera2, this.config.camera2)}
+          ${this._renderCamera(camera1, this.config.camera1, "camera1")}
+          ${this._renderCamera(camera2, this.config.camera2, "camera2")}
         </div>
       </ha-card>
     `;
   }
 
-  _renderCamera(camera, entityId) {
+  _renderCamera(camera, entityId, cameraId) {
     if (!camera) {
       return html`
         <div class="camera-container">
@@ -90,26 +122,38 @@ class DualCameraCard extends LitElement {
 
     return html`
       <div class="camera-container">
-        <img
-          class="camera-feed"
-          src="${this._getCameraUrl(entityId)}"
+        <ha-camera-stream
+          .hass=${this.hass}
+          .stateObj=${camera}
+          .muted=${this._muted[cameraId]}
+          controls
+          playsinline
           @click=${() => this._handleCameraClick(entityId)}
-          alt="${camera.attributes.friendly_name || entityId}"
-        />
+        ></ha-camera-stream>
+        <div class="controls">
+          <button
+            class="mute-button"
+            @click=${(e) => this._toggleMute(e, cameraId)}
+          >
+            <ha-icon
+              icon=${this._muted[cameraId]
+                ? "mdi:volume-off"
+                : "mdi:volume-high"}
+            ></ha-icon>
+            ${this._muted[cameraId] ? "Unmute" : "Mute"}
+          </button>
+        </div>
       </div>
     `;
   }
 
-  _getCameraUrl(entityId) {
-    return `/api/camera_proxy/${entityId}?token=${this._getToken(entityId)}`;
-  }
-
-  _getToken(entityId) {
-    const entity = this.hass.states[entityId];
-    if (!entity || !entity.attributes.access_token) {
-      return "";
-    }
-    return entity.attributes.access_token;
+  _toggleMute(e, cameraId) {
+    e.stopPropagation();
+    this._muted = {
+      ...this._muted,
+      [cameraId]: !this._muted[cameraId],
+    };
+    this.requestUpdate();
   }
 
   _handleCameraClick(entityId) {
@@ -237,5 +281,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "dual-camera-card",
   name: "Dual Camera Card",
-  description: "A card that displays two camera feeds side by side",
+  description:
+    "A card that displays two live camera feeds side by side with audio support",
 });
